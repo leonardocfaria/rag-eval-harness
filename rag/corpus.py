@@ -3,6 +3,7 @@ import importlib
 import inspect
 import random
 import re
+from collections import Counter
 
 from .retrievers import tokenize
 
@@ -36,17 +37,24 @@ def first_sentence(text: str) -> str:
     return re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0]
 
 
+def _name_tokens(d: dict) -> set[str]:
+    return set(tokenize(d["name"].replace("_", " "))) | {d["name"].lower()}
+
+
 def make_queries(docs: list[dict], n: int = 300, seed: int = 0) -> list[dict]:
     """Two queries per sampled doc: 'lexical' (first sentence minus the name) and 'noisy'
-    (6 shuffled content words from the whole docstring, each cut to a 4-letter prefix with p=0.5:
+    (6 shuffled content words from the whole docstring; words over 5 letters cut to a 4-letter prefix with p=0.5:
     partial/misspelled keywords, a vocabulary mismatch exact-term matching cannot bridge)."""
     rng = random.Random(seed)
-    candidates = [i for i, d in enumerate(docs) if len(tokenize(d["first"])) >= 4]
+    firsts = Counter(d["first"] for d in docs)
+    lexical_q = [" ".join(t for t in tokenize(d["first"]) if t not in _name_tokens(d)) for d in docs]
+    # unambiguous gold only: unique first sentence, and >= 4 tokens left once the name is removed
+    candidates = [i for i, d in enumerate(docs) if firsts[d["first"]] == 1 and len(lexical_q[i].split()) >= 4]
     queries = []
     for i in rng.sample(candidates, min(n, len(candidates))):
         d = docs[i]
-        name_toks = set(tokenize(d["name"].replace("_", " "))) | {d["name"].lower()}
-        lexical = " ".join(t for t in tokenize(d["first"]) if t not in name_toks)
+        name_toks = _name_tokens(d)
+        lexical = lexical_q[i]
         words = sorted({t for t in tokenize(d["text"].split(": ", 1)[1]) if len(t) > 2 and t not in name_toks})
         words = rng.sample(words, min(6, len(words)))
         words = [w[:4] if len(w) > 5 and rng.random() < 0.5 else w for w in words]

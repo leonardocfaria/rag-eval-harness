@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from statistics import mean
 
+import numpy as np
+
 from .corpus import DEFAULT_MODULES, build_corpus, make_queries
 from .llm import MockLLM, UnfaithfulMockLLM, sentences
 from .retrievers import BM25, Dense, Hybrid, tokenize
@@ -42,6 +44,13 @@ def token_f1(pred: str, gold: str) -> float:
     return 0.0 if not common else 2 * common / (len(p) + len(g))
 
 
+def bootstrap_ci(values: list[float], n: int = 1000, seed: int = 0) -> tuple[float, float]:
+    """95 % percentile bootstrap interval of the mean (queries resampled with replacement)."""
+    v = np.asarray(values)
+    means = np.sort(v[np.random.default_rng(seed).integers(0, len(v), (n, len(v)))].mean(1))
+    return float(means[int(0.025 * n)]), float(means[int(0.975 * n) - 1])
+
+
 def retrieval_metrics(retriever, queries) -> dict:
     t = time.perf_counter()
     ranked = [retriever.search(q["query"], max(KS)) for q in queries]
@@ -50,7 +59,8 @@ def retrieval_metrics(retriever, queries) -> dict:
     for qtype in ("all", "lexical", "noisy"):
         idx = [i for i, q in enumerate(queries) if qtype == "all" or q["type"] == qtype]
         row = {f"recall@{k}": mean(recall_at_k(ranked[i], queries[i]["gold"], k) for i in idx) for k in KS}
-        row["mrr@10"] = mean(mrr(ranked[i], queries[i]["gold"]) for i in idx)
+        rr = [mrr(ranked[i], queries[i]["gold"]) for i in idx]
+        row["mrr@10"], row["mrr_ci95"] = mean(rr), bootstrap_ci(rr)
         out[qtype] = row
     out["ms_per_query"] = ms
     return out
@@ -107,8 +117,8 @@ def run_all(modules=DEFAULT_MODULES, n_queries: int = 300, seed: int = 0, out: s
 def write_report(res: dict, out: Path):
     out.mkdir(parents=True, exist_ok=True)
     (out / "results.json").write_text(json.dumps(res, indent=2))
-    m = lambda r: [r["recall@1"], r["recall@5"], r["recall@10"], r["mrr@10"]]
-    hdr = ["recall@1", "recall@5", "recall@10", "MRR@10"]
+    m = lambda r: [r["recall@1"], r["recall@5"], r["recall@10"], r["mrr@10"], "{:.3f}-{:.3f}".format(*r["mrr_ci95"])]
+    hdr = ["recall@1", "recall@5", "recall@10", "MRR@10", "MRR 95% CI"]
     parts = [f"# RAG evaluation report\n\n{res['n_docs']} documents, {res['n_queries']} queries "
              f"(half lexical, half noisy), runtime {res['runtime_s']:.0f} s.\n",
              "## Retrievers\n", _table(["retriever", "query type", *hdr, "ms/query"],

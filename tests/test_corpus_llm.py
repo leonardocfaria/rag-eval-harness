@@ -11,8 +11,10 @@ def test_corpus_and_queries_are_deterministic():
     assert all(d["text"].startswith(d["id"]) for d in docs)
     q1, q2 = make_queries(docs, 10, seed=1), make_queries(docs, 10, seed=1)
     assert q1 == q2 and {q["type"] for q in q1} == {"lexical", "noisy"}
-    for q in q1:  # the object name never leaks into the query
-        assert docs[q["gold"]]["name"].lower() not in q["query"].split()
+    for q in q1:  # neither the object name nor any of its parts leaks into the query
+        name = docs[q["gold"]]["name"].lower()
+        assert not ({name} | set(name.split("_"))) & set(q["query"].split())
+        assert len(q["query"].split()) >= 3
 
 
 def test_mock_llm_is_extractive_and_cites():

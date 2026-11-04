@@ -40,6 +40,14 @@ def test_dense_and_hybrid_rank_all_docs(mode):
     assert h.search("square root", 1)[0] % 6 == 0
 
 
+def test_bootstrap_ci_brackets_mean():
+    from rag.evaluate import bootstrap_ci
+
+    lo, hi = bootstrap_ci([0.0, 1.0] * 50)
+    assert lo < 0.5 < hi and hi - lo < 0.3
+    assert bootstrap_ci([1.0] * 10) == (1.0, 1.0)
+
+
 def test_rrf_fusion_math():
     class Fixed:
         def __init__(self, s):

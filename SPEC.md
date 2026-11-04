@@ -9,6 +9,6 @@ Build "RAG system with a rigorous evaluation harness". Build a retrieval-augment
 - [x] ablation report committed
 - [x] Tests pass with one command; CI workflow runs them
 - [x] README with setup, usage, architecture and results
-- [ ] Self code review done
+- [x] Self code review done
 - [ ] Draft PR open
 

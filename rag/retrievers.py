@@ -82,5 +82,6 @@ class Hybrid(Retriever):
         fused = np.zeros_like(sa)
         for s in (sa, sb):
             top = np.argsort(-s, kind="stable")[: self.depth]
+            top = top[s[top] > 0]  # docs with no match get no fusion credit
             fused[top] += 1.0 / (self.k_rrf + np.arange(1, len(top) + 1))
         return fused
